@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced SVG Drawing Tool</title>
+
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f2f4f8;
+    }
+
+    .card {
+      width: 90vw;
+      max-width: 1000px;
+      padding: 24px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+
+    button, select, input[type="color"] {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button {
+      background: #2f7cf6;
+      color: white;
+    }
+
+    button:disabled { background: #b0c9ff; cursor: not-allowed; }
+
+    .canvas-wrapper {
+      border: 2px dashed #d6dbe1;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    svg {
+      width: 100%;
+      height: 60vh;
+      display: block;
+      cursor: crosshair;
+      background: #fafbff;
+    }
+
+    .counter {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="toolbar">
+    <button id="undoBtn" disabled>Undo</button>
+    <button id="clearBtn" disabled>Clear</button>
+
+    <select id="shapeSelect">
+      <option value="free">Free Draw</option>
+      <option value="circle">Circle</option>
+      <option value="rect">Rectangle</option>
+      <option value="line">Line</option>
+    </select>
+
+    <input type="color" id="colorPicker" value="#2f7cf6" />
+  </div>
+
+  <div class="canvas-wrapper">
+    <svg id="svgCanvas"></svg>
+  </div>
+
+  <div class="counter">
+    Shapes drawn: <span id="count">0</span>
+  </div>
+</div>
+
+<script>
+  const svg = document.getElementById("svgCanvas");
+  const undoBtn = document.getElementById("undoBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const countEl = document.getElementById("count");
+  const shapeSelect = document.getElementById("shapeSelect");
+  const colorPicker = document.getElementById("colorPicker");
+
+  let shapes = [];
+  let drawing = false;
+  let currentShape = null;
+
+  function getSVGPoint(e) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  svg.addEventListener("mousedown", (e) => {
+    drawing = true;
+    const { x, y } = getSVGPoint(e);
+    const color = colorPicker.value;
+    const type = shapeSelect.value;
+
+    if (type === "free") {
+      currentShape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      currentShape.setAttribute("d", `M ${x} ${y}`);
+      currentShape.setAttribute("stroke", color);
+      currentShape.setAttribute("stroke-width", 3);
+      currentShape.setAttribute("fill", "none");
+    }
+
+    if (type === "circle") {
+      currentShape = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      currentShape.setAttribute("cx", x);
+      currentShape.setAttribute("cy", y);
+      currentShape.setAttribute("r", 1);
+      currentShape.setAttribute("fill", "none");
+      currentShape.setAttribute("stroke", color);
+      currentShape.setAttribute("stroke-width", 2);
+    }
+
+    if (type === "rect") {
+      currentShape = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      currentShape.setAttribute("x", x);
+      currentShape.setAttribute("y", y);
+      currentShape.setAttribute("width", 1);
+      currentShape.setAttribute("height", 1);
+      currentShape.setAttribute("fill", "none");
+      currentShape.setAttribute("stroke", color);
+      currentShape.setAttribute("stroke-width", 2);
+    }
+
+    if (type === "line") {
+      currentShape = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      currentShape.setAttribute("x1", x);
+      currentShape.setAttribute("y1", y);
+      currentShape.setAttribute("x2", x);
+      currentShape.setAttribute("y2", y);
+      currentShape.setAttribute("stroke", color);
+      currentShape.setAttribute("stroke-width", 2);
+    }
+
+    svg.appendChild(currentShape);
+  });
+
+  svg.addEventListener("mousemove", (e) => {
+    if (!drawing || !currentShape) return;
+
+    const { x, y } = getSVGPoint(e);
+    const type = shapeSelect.value;
+
+    if (type === "free") {
+      const d = currentShape.getAttribute("d");
+      currentShape.setAttribute("d", `${d} L ${x} ${y}`);
+    }
+
+    if (type === "circle") {
+      const cx = currentShape.getAttribute("cx");
+      const cy = currentShape.getAttribute("cy");
+      const r = Math.hypot(x - cx, y - cy);
+      currentShape.setAttribute("r", r);
+    }
+
+    if (type === "rect") {
+      const startX = currentShape.getAttribute("x");
+      const startY = currentShape.getAttribute("y");
+      currentShape.setAttribute("width", Math.abs(x - startX));
+      currentShape.setAttribute("height", Math.abs(y - startY));
+    }
+
+    if (type === "line") {
+      currentShape.setAttribute("x2", x);
+      currentShape.setAttribute("y2", y);
+    }
+  });
+
+  svg.addEventListener("mouseup", () => finishShape());
+  svg.addEventListener("mouseleave", () => finishShape());
+
+  function finishShape() {
+    if (!currentShape) return;
+
+    shapes.push(currentShape);
+    currentShape = null;
+    drawing = false;
+    updateUI();
+  }
+
+  undoBtn.addEventListener("click", () => {
+    const last = shapes.pop();
+    if (last) svg.removeChild(last);
+    updateUI();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    shapes.forEach(s => svg.removeChild(s));
+    shapes = [];
+    updateUI();
+  });
+
+  function updateUI() {
+    countEl.textContent = shapes.length;
+    undoBtn.disabled = shapes.length === 0;
+    clearBtn.disabled = shapes.length === 0;
+  }
+</script>
+
+</body>
+</html>
